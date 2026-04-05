@@ -23,5 +23,6 @@ Built-in help: `music-flac --help` and `music-flac <command> --help`.
 ## Other project files
 
 - [README.md](../README.md) — project summary and links
+- [LICENSE](../LICENSE) — **AGPL-3.0-or-later** (full text)
 - [CHANGELOG.md](../CHANGELOG.md) — version history
 - [AGENTS.md](../AGENTS.md) — notes for contributors and coding agents

@@ -22,6 +22,7 @@ Context for anyone (human or assistant) working in this repository.
 
 ## Files to respect
 
+- **`LICENSE`** — **AGPL-3.0-or-later**; keep in sync if licensing changes (rare).
 - **`README.md`** — user-facing overview; update it when behavior or usage changes meaningfully.
 - **`docs/`** — user help (configuration, CLI, naming, backends); keep in sync when behavior or flags change.
 - **`AGENTS.md`** — this file; update when direction or constraints change.

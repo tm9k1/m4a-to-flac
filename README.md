@@ -86,4 +86,6 @@ See `CHANGELOG.md` for version history, `AGENTS.md` for contributor/agent notes,
 
 ## License
 
-Specify your license here if you publish the repo.
+**music-flac** is licensed under the [**GNU Affero General Public License v3.0 or later**](https://www.gnu.org/licenses/agpl-3.0.html) (SPDX: `AGPL-3.0-or-later`). See the [`LICENSE`](LICENSE) file for the full license text and project copyright notice.
+
+If you run a **modified** version of this program as a **network service**, the AGPL requires you to offer corresponding source to users of that service. Third-party APIs (for example hifi/Tidal endpoints) remain under their own terms.
