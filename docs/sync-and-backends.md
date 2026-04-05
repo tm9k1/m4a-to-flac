@@ -42,23 +42,30 @@ The sync step writes to a **temporary file** in the destination directory, then 
 
 To change the method, URL shape, or payload, edit **`src/music_flac/api/http.py`**.
 
-## hifi-api-compatible services
+## Backend: `hifi`
 
-Public or self-hosted instances that implement the **hifi-api** shape (for example [hifi.geeked.wtf](https://hifi.geeked.wtf/)) speak a **Tidal-oriented** JSON API described in upstream projects such as [binimum/hifi-api](https://github.com/binimum/hifi-api) and [monochrome-music/hifi-api-workers](https://github.com/monochrome-music/hifi-api-workers).
+- **`music-flac sync --backend hifi`**
+- Uses a **hifi-api-compatible** server (default [hifi.geeked.wtf](https://hifi.geeked.wtf/); set **`MUSIC_FLAC_HIFI_BASE`** or **`--hifi-base-url`**).
+- Per track:
+  1. Build a search string from tags (artist, title, album) or the cleaned filename stem.
+  2. **`GET /search?s=…&limit=…`** and pick the best hit vs. tags (`pick_best_search_item`).
+  3. **`GET /track?id=<tidal_track_id>&quality=…`** trying, in order, **`LOSSLESS`**, **`HI_RES_LOSSLESS`**, **`HIGH`** until a manifest yields a URL.
+  4. Decode the base64 **`manifest`**: JSON (**`application/vnd.tidal.bts`**) with a **`urls`** list, or fall back to scanning DASH/XML text for `https://…` (preferring `.flac` when present).
+  5. **`GET`** the first stream URL and save the bytes as the destination file.
 
-Typical pieces:
+Upstream schema and extra endpoints (**`/trackManifests`**, **`/info`**, etc.) are documented in [binimum/hifi-api](https://github.com/binimum/hifi-api) and [hifi-api-workers](https://github.com/monochrome-music/hifi-api-workers). This backend uses **`/search`** + **`/track`** only; extend **`music_flac.hifi`** / **`HifiFlacSource`** if you need manifest types we do not parse yet.
 
-- **`GET /`** — service metadata (`version`, `Repo`). **`music-flac hifi-probe`** calls this.
-- **`GET /search`** — discover tracks (query parameters per upstream docs).
-- **`GET /info?id=<tidal_track_id>`** — track metadata.
-- **`GET /track?id=<tidal_track_id>&quality=…`** — stream manifest (often base64 JSON with FLAC URLs).
-- **`GET /trackManifests`** — richer manifests (preferred in upstream docs for some formats).
+### Smoke test: one song
 
-**music-flac** does not yet implement search → manifest → CDN download as a built-in **`FlacSource`**. The **`http`** backend is a simple **POST→bytes** contract for your **own** gateway. To use hifi-api directly, add a new backend or extend the HTTP client to match that API.
+```bash
+music-flac hifi-fetch-one --query "Artist TrackTitle" --artist "Artist" --title "TrackTitle" -o out.flac
+```
+
+Requires network access to the hifi base URL and a working Tidal-backed deployment.
 
 ### User-Agent
 
-Some hosts return **403** to Python’s default **urllib** user agent. **`hifi-probe`** and **`HifiClient`** send an explicit **User-Agent** header; if you add custom clients, keep that in mind.
+Some hosts return **403** to Python’s default **urllib** user agent. **`HifiClient`** sends an explicit **User-Agent** header on JSON and CDN requests.
 
 ## Troubleshooting
 
@@ -66,6 +73,7 @@ Some hosts return **403** to Python’s default **urllib** user agent. **`hifi-p
 |--------|------------------|
 | `Not a directory` | `--source` must be an existing folder. |
 | HTTP backend exits 2 | Set `MUSIC_FLAC_API_URL` or `--api-url`. |
+| hifi search / track errors | Check tags, try `-v`; verify server with **`hifi-probe`**. |
 | Empty or corrupt `.flac` | Server must return **only** audio bytes; check status codes and errors in logs (`-v`). |
 | Wrong file names | Tag quality drives naming; see [library-mirror-naming.md](library-mirror-naming.md). |
 | Skipped files | Expected if the destination exists; use **`--force`** to refetch. |
@@ -73,4 +81,4 @@ Some hosts return **403** to Python’s default **urllib** user agent. **`hifi-p
 ## Related
 
 - [Configuration](configuration.md) — env vars and timeouts
-- [CLI reference — `sync` / `hifi-probe`](cli-reference.md)
+- [CLI reference — `sync` / `hifi-probe` / `hifi-fetch-one`](cli-reference.md)

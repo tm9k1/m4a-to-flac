@@ -83,6 +83,13 @@ def cmd_sync(args: argparse.Namespace, cfg: AppConfig) -> int:
             return 2
         token = args.api_token if args.api_token is not None else cfg.api_token
         source = HttpFlacSource(api_url=url, token=token, timeout_s=cfg.request_timeout_s)
+    elif backend == "hifi":
+        from music_flac.api.hifi_flac import HifiFlacSource
+        from music_flac.hifi import HifiClient
+
+        base = str(args.hifi_base_url or cfg.hifi_base_url)
+        client = HifiClient(base_url=base, timeout_s=cfg.request_timeout_s)
+        source = HifiFlacSource(client)
     else:
         source = StubFlacSource()
 
@@ -108,9 +115,37 @@ def cmd_sync(args: argparse.Namespace, cfg: AppConfig) -> int:
 def cmd_hifi_probe(args: argparse.Namespace, cfg: AppConfig) -> int:
     from music_flac.hifi import HifiClient
 
-    client = HifiClient(base_url=str(args.base_url), timeout_s=cfg.request_timeout_s)
+    base = str(args.base_url if args.base_url is not None else cfg.hifi_base_url)
+    client = HifiClient(base_url=base, timeout_s=cfg.request_timeout_s)
     info = client.service_info()
     print(json.dumps(info, indent=2))
+    return 0
+
+
+def cmd_hifi_fetch_one(args: argparse.Namespace, cfg: AppConfig) -> int:
+    from music_flac.api.hifi_flac import fetch_one_track_to_path
+    from music_flac.hifi import HifiClient
+
+    if not any([args.query, args.title, args.artist, args.album]):
+        print(
+            "Provide at least one of --query --title --artist --album.",
+            file=sys.stderr,
+        )
+        return 2
+    search_q = args.query or " ".join(
+        p for p in (args.artist, args.title, args.album) if p
+    )
+    base = str(args.base_url if args.base_url is not None else cfg.hifi_base_url)
+    client = HifiClient(base_url=base, timeout_s=cfg.request_timeout_s)
+    n = fetch_one_track_to_path(
+        client,
+        search_query=search_q,
+        output=args.output,
+        title=args.title,
+        artist=args.artist,
+        album=args.album,
+    )
+    print(f"Wrote {n} bytes to {posix_display(Path(args.output).resolve())}")
     return 0
 
 
@@ -159,9 +194,9 @@ def build_parser() -> argparse.ArgumentParser:
     py.add_argument("--dest", type=Path, default=DEFAULT_FLAC_ROOT)
     py.add_argument(
         "--backend",
-        choices=("stub", "http"),
+        choices=("stub", "http", "hifi"),
         default="stub",
-        help="stub: placeholder bytes; http: POST JSON to your API (see README).",
+        help="stub: placeholder; http: POST JSON; hifi: search+track manifest (hifi-api).",
     )
     py.add_argument(
         "--api-url",
@@ -183,6 +218,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Re-fetch even if the destination file already exists.",
     )
+    py.add_argument(
+        "--hifi-base-url",
+        default=None,
+        help="Override MUSIC_FLAC_HIFI_BASE for sync --backend hifi.",
+    )
     py.set_defaults(func=cmd_sync)
 
     ph = sub.add_parser(
@@ -192,10 +232,38 @@ def build_parser() -> argparse.ArgumentParser:
     ph.add_argument(
         "--base-url",
         type=str,
-        default="https://hifi.geeked.wtf/",
-        help="Server root (trailing slash optional).",
+        default=None,
+        help="Server root (default: MUSIC_FLAC_HIFI_BASE or https://hifi.geeked.wtf/).",
     )
     ph.set_defaults(func=cmd_hifi_probe)
+
+    pf = sub.add_parser(
+        "hifi-fetch-one",
+        help="Search hifi-api, download one track to a file (smoke test / manual grab).",
+    )
+    pf.add_argument(
+        "--base-url",
+        type=str,
+        default=None,
+        help="Server root (default: MUSIC_FLAC_HIFI_BASE or hifi.geeked.wtf).",
+    )
+    pf.add_argument(
+        "--query",
+        type=str,
+        default=None,
+        help="Search string passed as GET /search?s=… (track query).",
+    )
+    pf.add_argument("--title", type=str, default=None, help="Hint for picking the best hit.")
+    pf.add_argument("--artist", type=str, default=None, help="Hint for picking the best hit.")
+    pf.add_argument("--album", type=str, default=None, help="Hint for picking the best hit.")
+    pf.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        required=True,
+        help="Output file path (.flac or container extension from CDN).",
+    )
+    pf.set_defaults(func=cmd_hifi_fetch_one)
 
     return p
 

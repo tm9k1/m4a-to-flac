@@ -12,3 +12,4 @@ venv/
 *.log
 .env
 .env.local
+_hifi_test*

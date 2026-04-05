@@ -75,9 +75,10 @@ music-flac plan --source "D:/Libraries/Music/Good Music" --dest "D:/Libraries/Mu
 |--------|-------------|
 | `--source PATH` | Library root. |
 | `--dest PATH` | FLAC mirror root. |
-| `--backend stub \| http` | **`stub`:** placeholder content (testing). **`http`:** POST JSON to your API; response body = file bytes. |
+| `--backend stub \| http \| hifi` | **`stub`:** placeholder. **`http`:** POST JSON; response body = file bytes. **`hifi`:** hifi-api search → track manifest → CDN. |
 | `--api-url URL` | Override `MUSIC_FLAC_API_URL` for HTTP backend. |
 | `--api-token TOKEN` | Override `MUSIC_FLAC_API_TOKEN` for HTTP backend. |
+| `--hifi-base-url URL` | Override `MUSIC_FLAC_HIFI_BASE` for **`hifi`** backend. |
 | `--dry-run` | Do not write files; still logs what would happen. |
 | `--force` | Re-fetch and overwrite even if the destination file exists and is non-empty. |
 
@@ -92,6 +93,7 @@ music-flac plan --source "D:/Libraries/Music/Good Music" --dest "D:/Libraries/Mu
 ```bash
 music-flac sync --backend stub --dry-run
 music-flac sync --backend http --api-url https://example.com/flac
+music-flac sync --backend hifi --hifi-base-url https://hifi.geeked.wtf/
 ```
 
 See [Sync and backends](sync-and-backends.md) for backend details.
@@ -106,7 +108,7 @@ See [Sync and backends](sync-and-backends.md) for backend details.
 
 | Option | Description |
 |--------|-------------|
-| `--base-url URL` | Server root (default `https://hifi.geeked.wtf/`). Trailing slash optional. |
+| `--base-url URL` | Server root (default: `MUSIC_FLAC_HIFI_BASE` or `https://hifi.geeked.wtf/`). Trailing slash optional. |
 
 Uses `MUSIC_FLAC_API_TIMEOUT` as the request timeout unless you change config code.
 
@@ -121,4 +123,33 @@ Uses `MUSIC_FLAC_API_TIMEOUT` as the request timeout unless you change config co
 music-flac hifi-probe --base-url https://hifi.geeked.wtf/
 ```
 
-See [Sync and backends — hifi-api-compatible services](sync-and-backends.md#hifi-api-compatible-services).
+See [Sync and backends — Backend: `hifi`](sync-and-backends.md#backend-hifi).
+
+---
+
+## `hifi-fetch-one`
+
+**Purpose:** Run **`GET /search?s=…`**, pick the best hit (optionally guided by **`--title` / `--artist` / `--album`**), resolve **`GET /track`**, download the first stream URL, and write **`--output`**. Intended as a **smoke test** or manual one-off download (see [Sync and backends](sync-and-backends.md#backend-hifi)).
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--base-url URL` | Same as **`hifi-probe`** (default from env). |
+| `--query STR` | Track search string (`s` parameter). Optional if you build a query from **`--artist` / `--title` / `--album`**. |
+| `--title` / `--artist` / `--album` | Hints for choosing among search results. |
+| `--output` / `-o PATH` | Destination file (required). |
+
+At least one of **`--query`**, **`--title`**, **`--artist`**, or **`--album`** is required.
+
+### Exit codes
+
+- **0** — File written; byte count printed on stdout.
+- **2** — Missing search hints or fatal usage error.
+- Non-zero — Search empty, manifest/URL failure, or network error.
+
+### Example
+
+```bash
+music-flac hifi-fetch-one --query "Oasis Wonderwall" --artist "Oasis" --title "Wonderwall" -o wonderwall.flac
+```

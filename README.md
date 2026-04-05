@@ -20,7 +20,7 @@ Detailed help lives in the **[docs/](docs/README.md)** folder:
 - [Configuration and environment variables](docs/configuration.md)
 - [CLI reference (all commands and flags)](docs/cli-reference.md)
 - [Library scanning, mirror layout, and file naming](docs/library-mirror-naming.md)
-- [Sync behavior, stub/HTTP backends, and hifi-api notes](docs/sync-and-backends.md)
+- [Sync behavior, stub/HTTP/**hifi** backends](docs/sync-and-backends.md)
 
 ## Mirror file naming
 
@@ -43,20 +43,17 @@ When stripping a trailing **YouTube-style 11-character id** from the source file
 ```bash
 music-flac scan        [--source PATH]          # list tracks + tags
 music-flac plan        [--source PATH] [--dest PATH]   # source → mirror .flac paths
-music-flac sync        [--source PATH] [--dest PATH] [--backend stub|http] [--dry-run]
-music-flac hifi-probe  [--base-url URL]         # GET / JSON (default: hifi.geeked.wtf)
+music-flac sync           [--source PATH] [--dest PATH] [--backend stub|http|hifi] [--dry-run]
+music-flac hifi-probe     [--base-url URL]         # GET / JSON (default from MUSIC_FLAC_HIFI_BASE)
+music-flac hifi-fetch-one -o out.flac [--query …] [--artist …] [--title …]   # one-track smoke test
 ```
 
 - **`plan`** — No network; shows mapping with **forward slashes**. Same parent directories as the source; leaf names follow **Mirror file naming** above.
-- **`sync`** — **`stub`**: writes small placeholder files (for pipeline tests). **`http`**: POSTs JSON metadata to your API and saves the response body as the `.flac` file.
+- **`sync`** — **`stub`**: placeholder files. **`http`**: POST JSON to your API; body saved as `.flac`. **`hifi`**: [hifi-api](https://github.com/binimum/hifi-api)-compatible **search → `/track` manifest → CDN** download (default base [hifi.geeked.wtf](https://hifi.geeked.wtf/); override with `MUSIC_FLAC_HIFI_BASE` or `--hifi-base-url`).
 
 ### hifi-api-compatible services (e.g. [hifi.geeked.wtf](https://hifi.geeked.wtf/))
 
-These servers expose a **Tidal-oriented** JSON API (same shape as [binimum/hifi-api](https://github.com/binimum/hifi-api) / [hifi-api-workers](https://github.com/monochrome-music/hifi-api-workers)). `GET /` returns `version` and `Repo`. Typical streaming flow uses **`GET /track?id=<tidal_track_id>`** (manifest with FLAC URLs) or **`GET /trackManifests`**, after you resolve a Tidal id (often via **`GET /search`**). See the upstream README for full parameters and responses.
-
-Use **`music-flac hifi-probe`** to verify connectivity (sends a normal `User-Agent`; some hosts block default Python clients).
-
-This repo does not yet parse manifests or download from Tidal CDN; add a dedicated `FlacSource` when you wire search → track id → FLAC URL.
+These servers expose a **Tidal-oriented** JSON API ([binimum/hifi-api](https://github.com/binimum/hifi-api) / [hifi-api-workers](https://github.com/monochrome-music/hifi-api-workers)). Use **`music-flac hifi-probe`** to verify **`GET /`**. Use **`music-flac hifi-fetch-one`** or **`sync --backend hifi`** for search + stream download. Details: [docs/sync-and-backends.md](docs/sync-and-backends.md).
 
 ### HTTP API contract (adjust `music_flac.api.http` if yours differs)
 

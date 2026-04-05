@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.0] — 2026-04-05
+
+### Added
+
+- **`HifiFlacSource`** (`sync --backend hifi`): `GET /search?s=…` → best-hit selection → `GET /track` (qualities `LOSSLESS`, `HI_RES_LOSSLESS`, `HIGH`) → decode base64 manifest (JSON `urls` or DASH/XML URL scrape) → `GET` stream bytes.
+- **`music-flac hifi-fetch-one`** for a one-song smoke test; **`MUSIC_FLAC_HIFI_BASE`** / `--hifi-base-url` / shared timeout with other HTTP.
+- **`HifiClient`**: `search_tracks`, `get_track_json`, `fetch_bytes`; helpers `stream_urls_from_track_api_response`, `pick_best_search_item`, `search_query_from_track`.
+- Tests for manifest JSON parsing and search pick scoring. `.gitignore` `_hifi_test*`.
+
+### Changed
+
+- **`hifi-probe`** default base URL comes from **`MUSIC_FLAC_HIFI_BASE`** when `--base-url` is omitted.
+
+### Documentation
+
+- Updated `docs/` for **`hifi`** backend and **`hifi-fetch-one`**.
+
 ## [0.2.0] — 2026-04-05
 
 ### Added

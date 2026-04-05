@@ -6,7 +6,7 @@ Context for anyone (human or assistant) working in this repository.
 
 1. **Scan** the source library (`MUSIC_FLAC_SOURCE`, default `D:\Libraries\Music\Good Music`), parse tags (Mutagen), print a readable listing (`music-flac scan`).
 2. **Mirror** the same **parent** paths under the FLAC root (`MUSIC_FLAC_DEST`, default `D:\Libraries\Music\Good Music FLACs`); each leaf is **`.flac`** with a **clean, disambiguated name** from tags (`Title` → `Title - Artist` → `Title - Artist - Album`, plus numeric suffixes; strip trailing YouTube id from stem when title is missing). CLI paths print with **forward slashes** (`posix_display` / `as_posix()`).
-3. **Fetch** FLAC bytes per track via a pluggable **`FlacSource`**: `stub` for tests, `http` POST JSON to `MUSIC_FLAC_API_URL` (see `music_flac.api.http`). For **hifi-api**-style Tidal proxies (e.g. [hifi.geeked.wtf](https://hifi.geeked.wtf/)), see `music_flac.hifi` and upstream [binimum/hifi-api](https://github.com/binimum/hifi-api) docs; `music-flac hifi-probe` checks `GET /`.
+3. **Fetch** FLAC bytes per track via **`FlacSource`**: `stub`, `http` (`music_flac.api.http`), or **`hifi`** (`music_flac.api.hifi_flac` + `music_flac.hifi`: search → `/track` manifest → CDN). Base URL: `MUSIC_FLAC_HIFI_BASE` / `--hifi-base-url`. CLI: `hifi-probe`, `hifi-fetch-one`, `sync --backend hifi`.
 
 ## Design preferences
 
