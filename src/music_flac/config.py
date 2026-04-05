@@ -28,6 +28,7 @@ class AppConfig:
     api_token: str | None
     request_timeout_s: float
     hifi_base_url: str
+    sync_max_workers: int
 
     @classmethod
     def from_env(cls) -> AppConfig:
@@ -38,4 +39,13 @@ class AppConfig:
             api_token=os.environ.get("MUSIC_FLAC_API_TOKEN"),
             request_timeout_s=float(os.environ.get("MUSIC_FLAC_API_TIMEOUT", "120")),
             hifi_base_url=os.environ.get("MUSIC_FLAC_HIFI_BASE", DEFAULT_HIFI_BASE),
+            sync_max_workers=_sync_max_workers_from_env(),
         )
+
+
+def _sync_max_workers_from_env() -> int:
+    raw = os.environ.get("MUSIC_FLAC_SYNC_WORKERS", "8")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 8

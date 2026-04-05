@@ -98,14 +98,21 @@ def cmd_sync(args: argparse.Namespace, cfg: AppConfig) -> int:
     dry_run = bool(args.dry_run)
     skip_existing = not bool(args.force)
 
+    workers = (
+        args.workers if args.workers is not None else cfg.sync_max_workers
+    )
+    workers = max(1, int(workers))
+
     w, sk, errs = sync_tracks(
         pairs,
         source,
         dry_run=dry_run,
         skip_existing=skip_existing,
+        max_workers=workers,
     )
     print(
-        f"Done. written={w} skipped_existing={sk} errors={len(errs)} dry_run={dry_run}"
+        f"Done. written={w} skipped_existing={sk} errors={len(errs)} "
+        f"dry_run={dry_run} workers={workers}"
     )
     for e in errs:
         print(e, file=sys.stderr)
@@ -222,6 +229,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--hifi-base-url",
         default=None,
         help="Override MUSIC_FLAC_HIFI_BASE for sync --backend hifi.",
+    )
+    py.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Parallel downloads (max concurrent tracks). Default: MUSIC_FLAC_SYNC_WORKERS or 8. Use 1 for sequential.",
     )
     py.set_defaults(func=cmd_sync)
 

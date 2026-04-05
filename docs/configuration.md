@@ -38,6 +38,7 @@ Paths are normal `pathlib.Path` values on disk; only **printed** paths use forwa
 | `MUSIC_FLAC_API_TOKEN` | Optional bearer token for the HTTP backend (`Authorization: Bearer …`). Override with `--api-token`. |
 | `MUSIC_FLAC_API_TIMEOUT` | HTTP request timeout in seconds for **`sync`** backends, **`hifi-probe`**, **`hifi-fetch-one`**, and CDN downloads (default `120`). |
 | `MUSIC_FLAC_HIFI_BASE` | Base URL for **`sync --backend hifi`**, **`hifi-probe`**, and **`hifi-fetch-one`** when `--base-url` / `--hifi-base-url` is omitted (default `https://hifi.geeked.wtf/`). |
+| `MUSIC_FLAC_SYNC_WORKERS` | Default **`sync --workers`** when `--workers` is omitted: max concurrent track downloads (default **`8`**). Invalid values fall back to **8**; use **`1`** for fully sequential downloads. |
 
 `AppConfig.from_env()` loads these once per run (see `src/music_flac/config.py`).
 

@@ -79,6 +79,7 @@ music-flac plan --source "D:/Libraries/Music/Good Music" --dest "D:/Libraries/Mu
 | `--api-url URL` | Override `MUSIC_FLAC_API_URL` for HTTP backend. |
 | `--api-token TOKEN` | Override `MUSIC_FLAC_API_TOKEN` for HTTP backend. |
 | `--hifi-base-url URL` | Override `MUSIC_FLAC_HIFI_BASE` for **`hifi`** backend. |
+| `--workers N` | Parallel track downloads (thread pool). Default: `MUSIC_FLAC_SYNC_WORKERS` or **8**. Use **`1`** for sequential. |
 | `--dry-run` | Do not write files; still logs what would happen. |
 | `--force` | Re-fetch and overwrite even if the destination file exists and is non-empty. |
 
@@ -94,6 +95,7 @@ music-flac plan --source "D:/Libraries/Music/Good Music" --dest "D:/Libraries/Mu
 music-flac sync --backend stub --dry-run
 music-flac sync --backend http --api-url https://example.com/flac
 music-flac sync --backend hifi --hifi-base-url https://hifi.geeked.wtf/
+music-flac sync --backend hifi --workers 16
 ```
 
 See [Sync and backends](sync-and-backends.md) for backend details.

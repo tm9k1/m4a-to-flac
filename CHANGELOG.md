@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.1] — 2026-04-05
+
+### Added
+
+- **`sync --workers N`**: parallel track downloads via **`ThreadPoolExecutor`** (default **8** from **`MUSIC_FLAC_SYNC_WORKERS`** when `--workers` is omitted). **`sync_tracks(..., max_workers=…)`** for library use; default **`1`** keeps sequential behavior for direct callers.
+
+### Documentation
+
+- Configuration and sync docs updated for worker env / flags.
+
 ## [0.3.0] — 2026-04-05
 
 ### Added

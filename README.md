@@ -43,7 +43,7 @@ When stripping a trailing **YouTube-style 11-character id** from the source file
 ```bash
 music-flac scan        [--source PATH]          # list tracks + tags
 music-flac plan        [--source PATH] [--dest PATH]   # source → mirror .flac paths
-music-flac sync           [--source PATH] [--dest PATH] [--backend stub|http|hifi] [--dry-run]
+music-flac sync           [--source PATH] [--dest PATH] [--backend stub|http|hifi] [--workers N] [--dry-run]
 music-flac hifi-probe     [--base-url URL]         # GET / JSON (default from MUSIC_FLAC_HIFI_BASE)
 music-flac hifi-fetch-one -o out.flac [--query …] [--artist …] [--title …]   # one-track smoke test
 ```

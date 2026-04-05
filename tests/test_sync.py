@@ -52,3 +52,36 @@ def test_sync_skips_existing(tmp_path):
     w, sk, errs = sync_tracks(pairs, StubFlacSource(), dry_run=False, skip_existing=True)
     assert w == 0 and sk == 1
     assert dest.read_bytes() == b"keep"
+
+
+def test_sync_parallel_matches_sequential_stub(tmp_path):
+    root = tmp_path / "src"
+    root.mkdir()
+    flac_root = tmp_path / "flac"
+    tracks = [
+        TrackRecord(
+            source_path=Path("/tmp") / f"t{i}.mp3",
+            relative_path=Path(f"t{i}.mp3"),
+            artist="A",
+            album="B",
+            title=f"C{i}",
+            tracknumber=str(i),
+            discnumber=None,
+        )
+        for i in range(5)
+    ]
+    result = ScanResult(root=root, tracks=tracks)
+    pairs = mirror_plan(result, flac_root)
+    w1, sk1, e1 = sync_tracks(
+        pairs, StubFlacSource(), dry_run=False, skip_existing=True, max_workers=1
+    )
+    for p in flac_root.rglob("*.flac"):
+        p.unlink()
+    w4, sk4, e4 = sync_tracks(
+        pairs, StubFlacSource(), dry_run=False, skip_existing=True, max_workers=4
+    )
+    assert (w1, sk1, e1) == (w4, sk4, e4) == (5, 0, [])
+    for i in range(5):
+        f = flac_root / f"C{i}.flac"
+        assert f.is_file()
+        assert f.read_bytes().startswith(STUB_MARKER)

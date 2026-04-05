@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import tempfile
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from music_flac.api.base import FlacSource
@@ -56,39 +57,84 @@ def _atomic_write(target: Path, data: bytes) -> None:
         raise
 
 
+def _process_one_pair(
+    track: TrackRecord,
+    dest: Path,
+    source: FlacSource,
+) -> tuple[bool, str | None, Path, int]:
+    """
+    Fetch and write one track. Returns (ok, error_message_or_none, dest, byte_len).
+    """
+    try:
+        data = source.fetch_flac(track)
+        _atomic_write(dest, data)
+        return (True, None, dest, len(data))
+    except Exception as exc:
+        return (False, f"{track.relative_path}: {exc}", dest, 0)
+
+
 def sync_tracks(
     pairs: list[tuple[TrackRecord, Path]],
     source: FlacSource,
     *,
     dry_run: bool = False,
     skip_existing: bool = True,
+    max_workers: int = 1,
 ) -> tuple[int, int, list[str]]:
     """
     For each (track, dest), fetch FLAC bytes and write to dest.
 
+    When ``max_workers`` > 1 and not ``dry_run``, downloads run in a thread pool
+    (I/O-bound network + disk). Skipped and dry-run paths stay deterministic.
+
     Returns (written, skipped, errors).
     """
+    max_workers = max(1, int(max_workers))
     written = 0
     skipped = 0
     errors: list[str] = []
+    pending: list[tuple[TrackRecord, Path]] = []
 
     for track, dest in pairs:
         if skip_existing and dest.is_file() and dest.stat().st_size > 0:
             skipped += 1
             log.info("Skip existing: %s", posix_display(dest))
             continue
-        if dry_run:
+        pending.append((track, dest))
+
+    if dry_run:
+        for track, dest in pending:
             log.info("Would write: %s", posix_display(dest))
-            written += 1
-            continue
-        try:
-            data = source.fetch_flac(track)
-            _atomic_write(dest, data)
-            written += 1
-            log.info("Wrote %s (%s bytes)", posix_display(dest), len(data))
-        except Exception as exc:
-            msg = f"{track.relative_path}: {exc}"
-            errors.append(msg)
-            log.error("%s", msg)
+        written = len(pending)
+        return written, skipped, errors
+
+    if not pending:
+        return written, skipped, errors
+
+    if max_workers <= 1:
+        for track, dest in pending:
+            ok, msg, dest_path, sz = _process_one_pair(track, dest, source)
+            if ok:
+                written += 1
+                log.info("Wrote %s (%s bytes)", posix_display(dest_path), sz)
+            else:
+                errors.append(msg or "")
+                log.error("%s", msg)
+        return written, skipped, errors
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_map = {
+            pool.submit(_process_one_pair, track, dest, source): (track, dest)
+            for track, dest in pending
+        }
+        for fut in as_completed(future_map):
+            ok, msg, dest_path, sz = fut.result()
+            if ok:
+                written += 1
+                log.info("Wrote %s (%s bytes)", posix_display(dest_path), sz)
+            else:
+                if msg:
+                    errors.append(msg)
+                    log.error("%s", msg)
 
     return written, skipped, errors

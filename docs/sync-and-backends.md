@@ -9,6 +9,10 @@
    - If **`--dry-run`** is set, nothing is written; the tool logs what it **would** do.
    - Otherwise the tool calls the backend’s **`fetch_flac(track)`**, receives **bytes**, and writes the file.
 
+### Parallel downloads (`sync --workers`)
+
+Non-dry-run downloads use a **thread pool** so up to **N** tracks are in flight at once (`--workers N`, default from **`MUSIC_FLAC_SYNC_WORKERS`** or **8**). Skips are resolved on the main thread first; only active downloads are parallelized. Use **`--workers 1`** if you hit rate limits or want strictly ordered logs. The same **`FlacSource`** instance is shared across threads (e.g. one **`HifiClient`**); ensure your backend tolerates concurrent requests.
+
 ## Atomic writes
 
 The sync step writes to a **temporary file** in the destination directory, then **replaces** the final name. If the destination already exists on Windows, it is removed before replace, so updates are less likely to leave a half-written `.flac` visible under the final name.
