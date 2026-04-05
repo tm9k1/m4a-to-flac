@@ -13,6 +13,15 @@ Default paths (Windows):
 
 Override with `--source` / `--dest` or environment variables `MUSIC_FLAC_SOURCE` and `MUSIC_FLAC_DEST`.
 
+## Documentation
+
+Detailed help lives in the **[docs/](docs/README.md)** folder:
+
+- [Configuration and environment variables](docs/configuration.md)
+- [CLI reference (all commands and flags)](docs/cli-reference.md)
+- [Library scanning, mirror layout, and file naming](docs/library-mirror-naming.md)
+- [Sync behavior, stub/HTTP backends, and hifi-api notes](docs/sync-and-backends.md)
+
 ## Mirror file naming
 
 Under each source folder, destination **leaf** names are built from tags (title, artist, album), with this disambiguation **within that folder**:
@@ -76,7 +85,7 @@ pytest
 music-flac --help
 ```
 
-See `CHANGELOG.md` for version history and `AGENTS.md` for contributor/agent notes.
+See `CHANGELOG.md` for version history, `AGENTS.md` for contributor/agent notes, and **`docs/`** for full feature documentation.
 
 ## License
 

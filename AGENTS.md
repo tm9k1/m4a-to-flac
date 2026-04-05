@@ -23,6 +23,7 @@ Context for anyone (human or assistant) working in this repository.
 ## Files to respect
 
 - **`README.md`** — user-facing overview; update it when behavior or usage changes meaningfully.
+- **`docs/`** — user help (configuration, CLI, naming, backends); keep in sync when behavior or flags change.
 - **`AGENTS.md`** — this file; update when direction or constraints change.
 - **`CHANGELOG.md`** — add a bullet under the current version for user-visible or structural changes each iteration.
 
