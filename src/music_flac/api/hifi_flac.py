@@ -8,6 +8,7 @@ from music_flac.hifi import (
     HifiClient,
     pick_best_search_item,
     search_query_from_track,
+    search_query_without_album,
     stream_urls_from_track_api_response,
 )
 from music_flac.models import TrackRecord
@@ -33,6 +34,16 @@ class HifiFlacSource:
         if not q:
             raise RuntimeError(f"No search query derivable for {track.relative_path!s}")
         items = self.client.search_tracks(q)
+        if not items and track.album and str(track.album).strip():
+            q2 = search_query_without_album(track)
+            if q2 and q2 != q:
+                log.info(
+                    "hifi: empty search for %r; retrying without album as %r",
+                    q,
+                    q2,
+                )
+                q = q2
+                items = self.client.search_tracks(q)
         if not items:
             raise RuntimeError(f"hifi search returned no tracks for query: {q!r}")
         choice = pick_best_search_item(items, track)
@@ -83,9 +94,20 @@ def fetch_one_track_to_path(
         tracknumber=None,
         discnumber=None,
     )
+    last_q = search_query
     items = client.search_tracks(search_query)
+    if not items and album and str(album).strip():
+        alt = " ".join(p.strip() for p in (artist, title) if p and str(p).strip())
+        if alt and alt.strip() != search_query.strip():
+            log.info(
+                "hifi: empty search for %r; retrying without album as %r",
+                search_query,
+                alt,
+            )
+            last_q = alt
+            items = client.search_tracks(alt)
     if not items:
-        raise RuntimeError(f"hifi search returned no tracks for query: {search_query!r}")
+        raise RuntimeError(f"hifi search returned no tracks for query: {last_q!r}")
     choice = pick_best_search_item(items, probe)
     assert choice is not None
     tid = int(choice["id"])

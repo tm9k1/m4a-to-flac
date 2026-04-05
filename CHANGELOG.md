@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.2] — 2026-04-05
+
+### Changed
+
+- **hifi** search: if **`GET /search`** returns no items and the track has an **album** tag, retry with **artist + title** only (`search_query_without_album`). Same fallback for **`hifi-fetch-one`** when **`--album`** is set.
+
 ## [0.3.1] — 2026-04-05
 
 ### Added

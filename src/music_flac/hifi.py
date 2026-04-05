@@ -34,6 +34,15 @@ def search_query_from_track(track: TrackRecord) -> str:
     return q.strip()
 
 
+def search_query_without_album(track: TrackRecord) -> str:
+    """Same as full tag query but omits album (artist + title, then filename stem)."""
+    parts = [track.artist, track.title]
+    q = " ".join(p.strip() for p in parts if p and str(p).strip())
+    if not q:
+        q = strip_youtube_id_suffix(track.relative_path.stem)
+    return q.strip()
+
+
 def pick_best_search_item(
     items: list[dict[str, Any]],
     record: TrackRecord,

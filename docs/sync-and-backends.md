@@ -52,7 +52,7 @@ To change the method, URL shape, or payload, edit **`src/music_flac/api/http.py`
 - Uses a **hifi-api-compatible** server (default [hifi.geeked.wtf](https://hifi.geeked.wtf/); set **`MUSIC_FLAC_HIFI_BASE`** or **`--hifi-base-url`**).
 - Per track:
   1. Build a search string from tags (artist, title, album) or the cleaned filename stem.
-  2. **`GET /search?s=…&limit=…`** and pick the best hit vs. tags (`pick_best_search_item`).
+  2. **`GET /search?s=…&limit=…`** and pick the best hit vs. tags (`pick_best_search_item`). If there are **no** results and an **album** tag was part of the query, **retry** search with **artist + title** only (same idea as **`hifi-fetch-one`** when **`--album`** is set).
   3. **`GET /track?id=<tidal_track_id>&quality=…`** trying, in order, **`LOSSLESS`**, **`HI_RES_LOSSLESS`**, **`HIGH`** until a manifest yields a URL.
   4. Decode the base64 **`manifest`**: JSON (**`application/vnd.tidal.bts`**) with a **`urls`** list, or fall back to scanning DASH/XML text for `https://…` (preferring `.flac` when present).
   5. **`GET`** the first stream URL and save the bytes as the destination file.
