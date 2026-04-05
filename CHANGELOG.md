@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.0] — 2026-04-05
+
+### Added
+
+- `music_flac.paths.posix_display` and CLI output using **forward slashes** for all printed paths.
+- `music_flac.naming`: strip trailing **YouTube-style 11-character** ids from stems; build destination leaf names as **Title** / **Title - Artist** / **Title - Artist - Album** with per-folder disambiguation and numeric suffixes when metadata still collides.
+- `music_flac.hifi.HifiClient` plus CLI **`music-flac hifi-probe`** for `GET /` on hifi-api-compatible hosts (default [hifi.geeked.wtf](https://hifi.geeked.wtf/)); requests send an explicit **User-Agent** (plain urllib is often blocked).
+- Tests for naming, paths, and mocked hifi JSON.
+
+### Changed
+
+- `plan` / `sync` mirror targets now use **clean leaf names** (parent folders still match the source tree). HTTP JSON `relative_path` uses `as_posix()`.
+
 ## [0.1.0] — 2026-04-05
 
 ### Added

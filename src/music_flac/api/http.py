@@ -18,7 +18,7 @@ def _payload(track: TrackRecord) -> dict[str, str | None]:
         "title": track.title,
         "tracknumber": track.tracknumber,
         "discnumber": track.discnumber,
-        "relative_path": str(track.relative_path).replace("\\", "/"),
+        "relative_path": track.relative_path.as_posix(),
     }
 
 

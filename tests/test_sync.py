@@ -27,21 +27,24 @@ def test_mirror_plan(tmp_path):
     pairs = mirror_plan(result, flac_root)
     assert len(pairs) == 1
     _, dest = pairs[0]
-    assert dest == flac_root / "Artist" / "Album" / "song.flac"
+    assert dest == flac_root / "Artist" / "Album" / "C.flac"
 
 
 def test_sync_writes_stub(tmp_path):
+    root = tmp_path / "src"
+    root.mkdir()
     flac_root = tmp_path / "flac"
     t = _track("x.mp3")
-    pairs = [(t, flac_root / "x.flac")]
+    result = ScanResult(root=root, tracks=[t])
+    pairs = mirror_plan(result, flac_root)
     w, sk, errs = sync_tracks(pairs, StubFlacSource(), dry_run=False, skip_existing=True)
     assert w == 1 and sk == 0 and errs == []
-    data = (flac_root / "x.flac").read_bytes()
+    data = (flac_root / "C.flac").read_bytes()
     assert data.startswith(STUB_MARKER)
 
 
 def test_sync_skips_existing(tmp_path):
-    dest = tmp_path / "x.flac"
+    dest = tmp_path / "C.flac"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(b"keep")
     t = _track("x.mp3")
