@@ -132,10 +132,25 @@ def _process_one_pair(
     track: TrackRecord,
     dest: Path,
     source: FlacSource,
-) -> tuple[bool, str | None, Path, int]:
+    skip_existing: bool,
+) -> tuple[str, str | None, Path, int]:
     """
-    Fetch and write one track. Returns (ok, error_message_or_none, dest, byte_len).
+    Process one track/destination pair.
+
+    Returns (status, error_message_or_none, dest, bytes_written).
+    Status values: "downloaded", "metadata_updated", "skipped", "error".
     """
+    if skip_existing and dest.is_file() and dest.stat().st_size > 0:
+        if not _is_valid_flac_file(dest):
+            return ("skipped", None, dest, 0)
+        try:
+            if _update_existing_metadata_if_needed(track, dest, source):
+                return ("metadata_updated", None, dest, dest.stat().st_size)
+            return ("skipped", None, dest, 0)
+        except Exception as exc:
+            log.warning("Error checking metadata for existing %s: %s", dest, exc)
+            # Fall through to redownload if metadata check cannot complete.
+
     try:
         data, metadata = _fetch_flac_and_metadata(source, track)
         _atomic_write(dest, data)
@@ -144,9 +159,9 @@ def _process_one_pair(
                 apply_flac_metadata(dest, metadata)
             except Exception as exc:
                 log.warning("Failed to embed metadata for %s: %s", dest, exc)
-        return (True, None, dest, len(data))
+        return ("downloaded", None, dest, len(data))
     except Exception as exc:
-        return (False, f"{track.relative_path}: {exc}", dest, 0)
+        return ("error", f"{track.relative_path}: {exc}", dest, 0)
 
 
 def sync_tracks(
@@ -173,19 +188,26 @@ def sync_tracks(
 
     for track, dest in pairs:
         if skip_existing and dest.is_file() and dest.stat().st_size > 0:
-            if _is_valid_flac_file(dest) and _update_existing_metadata_if_needed(track, dest, source):
-                written += 1
-                log.info("Updated metadata for existing: %s", posix_display(dest))
-                continue
-            skipped += 1
-            log.info("Skip existing: %s", posix_display(dest))
+            pending.append((track, dest))
             continue
         pending.append((track, dest))
 
     if dry_run:
         for track, dest in pending:
-            log.info("Would write: %s", posix_display(dest))
-        written = len(pending)
+            if skip_existing and dest.is_file() and dest.stat().st_size > 0 and _is_valid_flac_file(dest):
+                log.info("Would update metadata if needed: %s", posix_display(dest))
+            else:
+                log.info("Would write: %s", posix_display(dest))
+        written = sum(
+            1
+            for track, dest in pending
+            if not (
+                skip_existing
+                and dest.is_file()
+                and dest.stat().st_size > 0
+                and _is_valid_flac_file(dest)
+            )
+        )
         return written, skipped, errors
 
     if not pending:
@@ -193,10 +215,16 @@ def sync_tracks(
 
     if max_workers <= 1:
         for track, dest in pending:
-            ok, msg, dest_path, sz = _process_one_pair(track, dest, source)
-            if ok:
+            status, msg, dest_path, sz = _process_one_pair(track, dest, source, skip_existing)
+            if status == "downloaded":
                 written += 1
-                log.info("Wrote %s (%s bytes)", posix_display(dest_path), sz)
+                log.info("Downloaded %s (%s bytes)", posix_display(dest_path), sz)
+            elif status == "metadata_updated":
+                written += 1
+                log.info("Updated metadata for %s", posix_display(dest_path))
+            elif status == "skipped":
+                skipped += 1
+                log.info("Skip existing: %s", posix_display(dest_path))
             else:
                 errors.append(msg or "")
                 log.error("%s", msg)
@@ -204,14 +232,20 @@ def sync_tracks(
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         future_map = {
-            pool.submit(_process_one_pair, track, dest, source): (track, dest)
+            pool.submit(_process_one_pair, track, dest, source, skip_existing): (track, dest)
             for track, dest in pending
         }
         for fut in as_completed(future_map):
-            ok, msg, dest_path, sz = fut.result()
-            if ok:
+            status, msg, dest_path, sz = fut.result()
+            if status == "downloaded":
                 written += 1
-                log.info("Wrote %s (%s bytes)", posix_display(dest_path), sz)
+                log.info("Downloaded %s (%s bytes)", posix_display(dest_path), sz)
+            elif status == "metadata_updated":
+                written += 1
+                log.info("Updated metadata for %s", posix_display(dest_path))
+            elif status == "skipped":
+                skipped += 1
+                log.info("Skip existing: %s", posix_display(dest_path))
             else:
                 if msg:
                     errors.append(msg)
