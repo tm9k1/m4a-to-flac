@@ -17,3 +17,17 @@ class StubFlacSource:
         meta = f"{track.artist!s} / {track.album!s} / {track.title!s}\n".encode("utf-8")
         log.debug("Stub fetch for %s", track.relative_path)
         return STUB_MARKER + meta
+
+    def fetch_metadata(self, track: TrackRecord) -> dict[str, object]:
+        return {
+            "tags": {
+                "ARTIST": track.artist or "",
+                "ALBUM": track.album or "",
+                "TITLE": track.title or "",
+                "TRACKNUMBER": track.tracknumber or "",
+                "DISCNUMBER": track.discnumber or "",
+            }
+        }
+
+    def fetch_flac_with_metadata(self, track: TrackRecord) -> tuple[bytes, dict[str, object]]:
+        return self.fetch_flac(track), self.fetch_metadata(track)

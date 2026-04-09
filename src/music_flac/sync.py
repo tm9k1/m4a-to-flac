@@ -6,7 +6,10 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from mutagen.flac import FLAC
+
 from music_flac.api.base import FlacSource
+from music_flac.metadata import apply_flac_metadata, needs_flac_metadata_update
 from music_flac.models import ScanResult, TrackRecord
 from music_flac.naming import destination_relative_flac, resolve_stems_in_folder
 from music_flac.paths import posix_display
@@ -57,6 +60,74 @@ def _atomic_write(target: Path, data: bytes) -> None:
         raise
 
 
+def _fetch_flac_and_metadata(
+    source: FlacSource,
+    track: TrackRecord,
+) -> tuple[bytes, dict[str, object] | None]:
+    if hasattr(source, "fetch_flac_with_metadata"):
+        result = source.fetch_flac_with_metadata(track)
+        if isinstance(result, tuple) and len(result) == 2:
+            data, metadata = result
+            if isinstance(metadata, dict):
+                return data, metadata
+            return data, None
+    return source.fetch_flac(track), None
+
+
+def _is_valid_flac_file(dest: Path) -> bool:
+    try:
+        FLAC(dest)
+        return True
+    except Exception:
+        return False
+
+
+def _fetch_metadata(source: FlacSource, track: TrackRecord) -> dict[str, object] | None:
+    if hasattr(source, "fetch_metadata"):
+        try:
+            metadata = source.fetch_metadata(track)
+            if isinstance(metadata, dict):
+                return metadata
+        except Exception as exc:
+            log.warning("Could not fetch metadata for %s: %s", track.relative_path, exc)
+            return None
+
+    if hasattr(source, "fetch_flac_with_metadata"):
+        try:
+            result = source.fetch_flac_with_metadata(track)
+            if isinstance(result, tuple) and len(result) == 2:
+                _, metadata = result
+                if isinstance(metadata, dict):
+                    return metadata
+        except Exception as exc:
+            log.warning("Could not fetch metadata for %s: %s", track.relative_path, exc)
+    return None
+
+
+def _update_existing_metadata_if_needed(
+    track: TrackRecord,
+    dest: Path,
+    source: FlacSource,
+) -> bool:
+    metadata = _fetch_metadata(source, track)
+    if not metadata:
+        return False
+
+    try:
+        if not needs_flac_metadata_update(dest, metadata):
+            return False
+    except Exception as exc:
+        log.warning("Could not read existing FLAC for %s: %s", dest, exc)
+        return False
+
+    try:
+        apply_flac_metadata(dest, metadata)
+        return True
+    except Exception as exc:
+        log.warning("Failed to update metadata for %s: %s", dest, exc)
+        return False
+
+
 def _process_one_pair(
     track: TrackRecord,
     dest: Path,
@@ -66,8 +137,13 @@ def _process_one_pair(
     Fetch and write one track. Returns (ok, error_message_or_none, dest, byte_len).
     """
     try:
-        data = source.fetch_flac(track)
+        data, metadata = _fetch_flac_and_metadata(source, track)
         _atomic_write(dest, data)
+        if metadata:
+            try:
+                apply_flac_metadata(dest, metadata)
+            except Exception as exc:
+                log.warning("Failed to embed metadata for %s: %s", dest, exc)
         return (True, None, dest, len(data))
     except Exception as exc:
         return (False, f"{track.relative_path}: {exc}", dest, 0)
@@ -97,6 +173,10 @@ def sync_tracks(
 
     for track, dest in pairs:
         if skip_existing and dest.is_file() and dest.stat().st_size > 0:
+            if _is_valid_flac_file(dest) and _update_existing_metadata_if_needed(track, dest, source):
+                written += 1
+                log.info("Updated metadata for existing: %s", posix_display(dest))
+                continue
             skipped += 1
             log.info("Skip existing: %s", posix_display(dest))
             continue

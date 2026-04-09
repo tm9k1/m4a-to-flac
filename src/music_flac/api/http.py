@@ -56,3 +56,12 @@ class HttpFlacSource:
         except urllib.error.URLError as e:
             log.error("Request failed: %s", e)
             raise
+
+    def fetch_metadata(self, track: TrackRecord) -> dict[str, object]:
+        return {}
+
+    def fetch_flac_with_metadata(self, track: TrackRecord) -> tuple[bytes, dict[str, object]]:
+        return self.fetch_flac(track), {}
+
+    def fetch_flac_with_metadata(self, track: TrackRecord) -> tuple[bytes, dict[str, object]]:
+        return self.fetch_flac(track), {}

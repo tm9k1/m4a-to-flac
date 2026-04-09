@@ -11,3 +11,15 @@ class FlacSource(Protocol):
     def fetch_flac(self, track: TrackRecord) -> bytes:
         """Return raw FLAC bytes for this track."""
         ...
+
+    def fetch_metadata(self, track: TrackRecord) -> dict[str, object]:
+        """Return optional metadata that can be written into an existing FLAC file."""
+        ...
+
+    def fetch_flac_with_metadata(self, track: TrackRecord) -> tuple[bytes, dict[str, object]]:
+        """Return raw FLAC bytes and optional metadata for embedding into the downloaded file."""
+        ...
+
+    def fetch_flac_with_metadata(self, track: TrackRecord) -> tuple[bytes, dict[str, object]]:
+        """Return raw FLAC bytes and optional metadata for embedding into the downloaded file."""
+        ...

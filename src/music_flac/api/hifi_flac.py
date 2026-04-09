@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from music_flac.hifi import (
     HifiClient,
@@ -11,6 +12,7 @@ from music_flac.hifi import (
     search_query_without_album,
     stream_urls_from_track_api_response,
 )
+from music_flac.metadata import apply_flac_metadata
 from music_flac.models import TrackRecord
 
 log = logging.getLogger(__name__)
@@ -30,6 +32,25 @@ class HifiFlacSource:
     qualities: tuple[str, ...] = DEFAULT_QUALITIES
 
     def fetch_flac(self, track: TrackRecord) -> bytes:
+        data, _ = self.fetch_flac_with_metadata(track)
+        return data
+
+    def fetch_metadata(self, track: TrackRecord) -> dict[str, object]:
+        choice, tid = self._resolve_track(track)
+        payload = self._find_track_payload(tid)
+        return self._metadata_from_track_json(payload, track)
+
+    def fetch_flac_with_metadata(self, track: TrackRecord) -> tuple[bytes, dict[str, object]]:
+        choice, tid = self._resolve_track(track)
+        payload = self._find_track_payload(tid)
+        metadata = self._metadata_from_track_json(payload, track)
+        urls = stream_urls_from_track_api_response(payload)
+        if not urls:
+            raise RuntimeError(f"Could not obtain stream URL for track id {tid}")
+        log.info("hifi: fetching audio for track id %s (%s URL(s))", tid, len(urls))
+        return self.client.fetch_bytes(urls[0]), metadata
+
+    def _resolve_track(self, track: TrackRecord) -> tuple[dict[str, Any], int]:
         q = search_query_from_track(track)
         if not q:
             raise RuntimeError(f"No search query derivable for {track.relative_path!s}")
@@ -55,21 +76,131 @@ class HifiFlacSource:
             (choice.get("artist") or {}).get("name", "?"),
             choice.get("title", "?"),
         )
+        return choice, tid
+
+    def _find_track_payload(self, tid: int) -> dict[str, Any]:
         last: Exception | None = None
         for quality in self.qualities:
             try:
                 payload = self.client.get_track_json(tid, quality=quality)
-                urls = stream_urls_from_track_api_response(payload)
-                if not urls:
-                    continue
-                log.info("hifi: fetching quality=%s (%s URL(s))", quality, len(urls))
-                return self.client.fetch_bytes(urls[0])
+                if stream_urls_from_track_api_response(payload):
+                    return payload
             except Exception as exc:
                 last = exc
                 log.debug("hifi: quality %s failed: %s", quality, exc)
-        raise RuntimeError(
-            f"Could not obtain stream URL or audio for track id {tid} ({q!r})"
-        ) from last
+        raise RuntimeError(f"Could not obtain track payload for id {tid}") from last
+
+    def _metadata_from_track_json(
+        self,
+        payload: dict[str, Any],
+        track: TrackRecord,
+    ) -> dict[str, object]:
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            return {}
+
+        tags: dict[str, str] = {}
+        tags["TITLE"] = self._coalesce(
+            data,
+            ["title", "name"],
+            default=track.title,
+        )
+        tags["ARTIST"] = self._coalesce(
+            data.get("artist", {}),
+            ["name", "title"],
+            default=track.artist,
+        )
+        tags["ALBUM"] = self._coalesce(
+            data.get("album", {}),
+            ["title", "name"],
+            default=track.album,
+        )
+        tags["TRACKNUMBER"] = self._coalesce(
+            data,
+            ["trackNumber", "track_number", "track"],
+            default=track.tracknumber,
+        )
+        tags["DISCNUMBER"] = self._coalesce(
+            data,
+            ["discNumber", "disc_number", "disc"],
+            default=track.discnumber,
+        )
+        date = self._coalesce(
+            data,
+            ["releaseDate", "year", "release_date"],
+        )
+        if date:
+            tags["DATE"] = date
+        genre = self._coalesce(data, ["genre"])
+        if genre:
+            tags["GENRE"] = genre
+
+        pictures: list[dict[str, object]] = []
+        for url in self._image_urls_from_hifi_data(data):
+            try:
+                image_data, content_type = self.client.fetch_bytes_with_content_type(url)
+            except Exception:
+                continue
+            pictures.append(
+                {
+                    "data": image_data,
+                    "mime": content_type,
+                    "url": url,
+                    "type": 3,
+                    "desc": "Cover art",
+                }
+            )
+            break
+
+        return {"tags": tags, "pictures": pictures}
+
+    def _coalesce(
+        self,
+        source: Any,
+        keys: list[str],
+        default: str | None = None,
+    ) -> str | None:
+        if isinstance(source, dict):
+            for key in keys:
+                value = source.get(key)
+                if value is not None:
+                    return str(value)
+        return str(default) if default is not None else None
+
+    def _image_urls_from_hifi_data(self, data: dict[str, Any]) -> list[str]:
+        candidates: list[str] = []
+
+        def add_url(value: Any) -> None:
+            if isinstance(value, str) and value.strip():
+                candidates.append(value.strip())
+
+        def scan_object(obj: Any) -> None:
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    if key.lower() in {
+                        "cover",
+                        "picture",
+                        "image",
+                        "coverurl",
+                        "pictureurl",
+                        "imageurl",
+                        "cover_url",
+                        "picture_url",
+                        "image_url",
+                    }:
+                        add_url(value)
+                    elif isinstance(value, (dict, list)):
+                        scan_object(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    scan_object(item)
+
+        album = data.get("album")
+        artist = data.get("artist")
+        scan_object(album)
+        scan_object(artist)
+        scan_object(data)
+        return candidates
 
 
 def fetch_one_track_to_path(
@@ -114,6 +245,7 @@ def fetch_one_track_to_path(
     out = Path(output)
     out.parent.mkdir(parents=True, exist_ok=True)
     last: Exception | None = None
+    src = HifiFlacSource(client=client)
     for quality in DEFAULT_QUALITIES:
         try:
             payload = client.get_track_json(tid, quality=quality)
@@ -122,6 +254,12 @@ def fetch_one_track_to_path(
                 continue
             data = client.fetch_bytes(urls[0])
             out.write_bytes(data)
+            try:
+                metadata = src._metadata_from_track_json(payload, probe)
+                if metadata:
+                    apply_flac_metadata(out, metadata)
+            except Exception as exc:
+                log.warning("Failed to embed metadata for %s: %s", out, exc)
             return len(data)
         except Exception as exc:
             last = exc

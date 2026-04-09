@@ -165,6 +165,18 @@ class HifiClient:
         except urllib.error.URLError as e:
             raise RuntimeError(f"stream request failed for {url}: {e}") from e
 
+    def fetch_bytes_with_content_type(self, url: str) -> tuple[bytes, str | None]:
+        req = self._request(url, method="GET")
+        req.add_header("Accept", "*/*")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+                data = resp.read()
+                return data, resp.getheader("Content-Type")
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"stream HTTP {e.code} for {url}") from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"stream request failed for {url}: {e}") from e
+
     def service_info(self) -> dict[str, Any]:
         return self.get_json("/")
 
