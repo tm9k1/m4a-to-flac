@@ -102,3 +102,62 @@ def test_hifi_flac_retries_search_when_empty_and_album_tag_set():
     assert client.search_tracks.call_count == 2
     assert client.search_tracks.call_args_list[0][0][0] == "A Song Wrong Album"
     assert client.search_tracks.call_args_list[1][0][0] == "A Song"
+
+
+def test_hifi_flac_with_metadata_fetches_cover_art_and_tags():
+    track = TrackRecord(
+        source_path=Path("/x"),
+        relative_path=Path("t.mp3"),
+        artist="A",
+        album="B",
+        title="C",
+        tracknumber="1",
+        discnumber="2",
+    )
+    client = MagicMock()
+    client.search_tracks.return_value = [
+        {
+            "id": 99,
+            "title": "C",
+            "artist": {"name": "A"},
+            "album": {"title": "B"},
+        }
+    ]
+    inner = {
+        "mimeType": "audio/flac",
+        "codecs": "flac",
+        "urls": ["https://cdn.example/x.flac"],
+    }
+    client.get_track_json.return_value = {
+        "data": {
+            "manifest": base64.b64encode(json.dumps(inner).encode()).decode(),
+            "manifestMimeType": "application/vnd.tidal.bts",
+            "title": "C",
+            "artist": {"name": "A"},
+            "album": {
+                "title": "B",
+                "cover": "https://images.example/cover.jpg",
+            },
+            "trackNumber": 1,
+            "discNumber": 2,
+            "genre": "Rock",
+            "releaseDate": "2020-01-01",
+        }
+    }
+    client.fetch_bytes.return_value = b"fLaCdata"
+    client.fetch_bytes_with_content_type.return_value = (b"\xff\xd8\xfffakejpeg", "image/jpeg")
+
+    src = HifiFlacSource(client=client)
+    data, metadata = src.fetch_flac_with_metadata(track)
+
+    assert data == b"fLaCdata"
+    assert metadata["tags"]["ARTIST"] == "A"
+    assert metadata["tags"]["ALBUM"] == "B"
+    assert metadata["tags"]["TITLE"] == "C"
+    assert metadata["tags"]["TRACKNUMBER"] == "1"
+    assert metadata["tags"]["DISCNUMBER"] == "2"
+    assert metadata["tags"]["GENRE"] == "Rock"
+    assert metadata["tags"]["DATE"] == "2020-01-01"
+    assert metadata["pictures"]
+    assert metadata["pictures"][0]["mime"] == "image/jpeg"
+    assert metadata["pictures"][0]["data"] == b"\xff\xd8\xfffakejpeg"

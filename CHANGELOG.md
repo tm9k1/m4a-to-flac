@@ -7,6 +7,7 @@ All notable changes to this project are documented in this file.
 ### Added
 
 - **`LICENSE`**: GNU **Affero** General Public License **v3** (full text) with project copyright; package metadata `license` / Trove classifier **AGPL-3.0-or-later**.
+- **Metadata embedding for FLAC downloads**: server-provided metadata and cover art are now extracted from `hifi` payloads and written into downloaded FLAC files when available.
 
 ## [0.3.2] — 2026-04-05
 

@@ -1,7 +1,13 @@
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
+from mutagen.flac import FLAC
 
 from music_flac.models import ScanResult, TrackRecord
 from music_flac.api.stub import StubFlacSource, STUB_MARKER
+from music_flac.metadata import apply_flac_metadata
 from music_flac.sync import mirror_plan, sync_tracks
 
 
@@ -52,6 +58,69 @@ def test_sync_skips_existing(tmp_path):
     w, sk, errs = sync_tracks(pairs, StubFlacSource(), dry_run=False, skip_existing=True)
     assert w == 0 and sk == 1
     assert dest.read_bytes() == b"keep"
+
+
+def test_sync_updates_existing_metadata_when_available(tmp_path, monkeypatch):
+    dest = tmp_path / "C.flac"
+    dest.write_bytes(b"existing")
+    t = _track("x.mp3")
+    pairs = [(t, dest)]
+
+    class MetadataSource:
+        def fetch_metadata(self, track):
+            return {"tags": {"TITLE": "C"}}
+
+    monkeypatch.setattr("music_flac.sync._is_valid_flac_file", lambda _dest: True)
+    monkeypatch.setattr("music_flac.sync._update_existing_metadata_if_needed", lambda track, _dest, source: True)
+
+    w, sk, errs = sync_tracks(pairs, MetadataSource(), dry_run=False, skip_existing=True)
+    assert w == 1 and sk == 0 and errs == []
+
+
+def test_apply_flac_metadata_embeds_cover_art(tmp_path):
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg required to generate a valid FLAC file")
+
+    flac_path = tmp_path / "test.flac"
+    jpg_path = tmp_path / "cover.jpg"
+    jpg_path.write_bytes(b"\xff\xd8\xffJPEGDATA")
+
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=1000:duration=0.1",
+            str(flac_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    metadata = {
+        "tags": {"TITLE": "Test", "ARTIST": "Me", "ALBUM": "Album"},
+        "pictures": [
+            {
+                "data": jpg_path.read_bytes(),
+                "mime": "image/jpeg",
+                "url": str(jpg_path),
+                "type": 3,
+                "desc": "Cover art",
+            }
+        ],
+    }
+    apply_flac_metadata(flac_path, metadata)
+
+    flac = FLAC(flac_path)
+    assert flac.tags["TITLE"] == ["Test"]
+    assert flac.tags["ARTIST"] == ["Me"]
+    assert flac.tags["ALBUM"] == ["Album"]
+    assert len(flac.pictures) == 1
+    assert flac.pictures[0].mime == "image/jpeg"
+    assert flac.pictures[0].desc == "Cover art"
 
 
 def test_sync_parallel_matches_sequential_stub(tmp_path):
