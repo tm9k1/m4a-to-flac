@@ -8,6 +8,8 @@ All notable changes to this project are documented in this file.
 
 - **`LICENSE`**: GNU **Affero** General Public License **v3** (full text) with project copyright; package metadata `license` / Trove classifier **AGPL-3.0-or-later**.
 - **Metadata embedding for FLAC downloads**: server-provided metadata and cover art are now extracted from `hifi` payloads and written into downloaded FLAC files when available.
+- **`sync --show-errors-only`**: new flag to suppress successful download logs, showing only errors and the summary.
+- **Enhanced hifi search fallbacks**: additional retry steps when initial search fails - first with title only, then with title stripped of parenthetical content (e.g., "Song (feat. Artist)" becomes "Song").
 
 ## [0.3.2] — 2026-04-05
 

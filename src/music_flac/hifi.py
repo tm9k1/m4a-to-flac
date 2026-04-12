@@ -15,6 +15,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 from music_flac import __version__
@@ -41,6 +43,23 @@ def search_query_without_album(track: TrackRecord) -> str:
     if not q:
         q = strip_youtube_id_suffix(track.relative_path.stem)
     return q.strip()
+
+
+def search_query_title_only(track: TrackRecord) -> str:
+    """Search with title only."""
+    if track.title and str(track.title).strip():
+        return str(track.title).strip()
+    return strip_youtube_id_suffix(track.relative_path.stem)
+
+
+def search_query_title_without_parens(track: TrackRecord) -> str:
+    """Search with title but remove content within parentheses."""
+    title = track.title or strip_youtube_id_suffix(track.relative_path.stem)
+    if not title:
+        return ""
+    # Remove content within parentheses, including the parentheses
+    title_clean = re.sub(r'\([^)]*\)', '', title).strip()
+    return title_clean
 
 
 def pick_best_search_item(

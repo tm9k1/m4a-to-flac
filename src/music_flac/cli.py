@@ -66,6 +66,9 @@ def cmd_plan(args: argparse.Namespace, cfg: AppConfig) -> int:
 
 
 def cmd_sync(args: argparse.Namespace, cfg: AppConfig) -> int:
+    if args.show_errors_only:
+        logging.getLogger().setLevel(logging.ERROR)
+
     source_root = Path(args.source).expanduser().resolve()
     flac_root = Path(args.dest).expanduser().resolve()
     if not source_root.is_dir():
@@ -236,6 +239,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="N",
         help="Parallel downloads (max concurrent tracks). Default: MUSIC_FLAC_SYNC_WORKERS or 8. Use 1 for sequential.",
+    )
+    py.add_argument(
+        "--show-errors-only",
+        action="store_true",
+        help="Only log errors, not successful downloads.",
     )
     py.set_defaults(func=cmd_sync)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,8 @@ from music_flac.hifi import (
     HifiClient,
     pick_best_search_item,
     search_query_from_track,
+    search_query_title_only,
+    search_query_title_without_parens,
     search_query_without_album,
     stream_urls_from_track_api_response,
 )
@@ -64,6 +67,26 @@ class HifiFlacSource:
                     q2,
                 )
                 q = q2
+                items = self.client.search_tracks(q)
+        if not items:
+            q3 = search_query_title_only(track)
+            if q3 and q3 != q:
+                log.info(
+                    "hifi: empty search for %r; retrying with title only as %r",
+                    q,
+                    q3,
+                )
+                q = q3
+                items = self.client.search_tracks(q)
+        if not items:
+            q4 = search_query_title_without_parens(track)
+            if q4 and q4 != q:
+                log.info(
+                    "hifi: empty search for %r; retrying with title without parentheses as %r",
+                    q,
+                    q4,
+                )
+                q = q4
                 items = self.client.search_tracks(q)
         if not items:
             raise RuntimeError(f"hifi search returned no tracks for query: {q!r}")
@@ -237,6 +260,26 @@ def fetch_one_track_to_path(
             )
             last_q = alt
             items = client.search_tracks(alt)
+    if not items and title and str(title).strip():
+        alt2 = str(title).strip()
+        if alt2 != last_q:
+            log.info(
+                "hifi: empty search for %r; retrying with title only as %r",
+                last_q,
+                alt2,
+            )
+            last_q = alt2
+            items = client.search_tracks(alt2)
+    if not items and title:
+        alt3 = re.sub(r'\([^)]*\)', '', str(title)).strip()
+        if alt3 and alt3 != last_q:
+            log.info(
+                "hifi: empty search for %r; retrying with title without parentheses as %r",
+                last_q,
+                alt3,
+            )
+            last_q = alt3
+            items = client.search_tracks(alt3)
     if not items:
         raise RuntimeError(f"hifi search returned no tracks for query: {last_q!r}")
     choice = pick_best_search_item(items, probe)
