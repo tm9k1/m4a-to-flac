@@ -68,30 +68,30 @@ def cmd_plan(args: argparse.Namespace, cfg: AppConfig) -> int:
 
 
 def filter_tracks_by_patterns(
-    pairs: list[tuple[TrackRecord, Path]], 
-    include_patterns: list[str], 
+    pairs: list[tuple[TrackRecord, Path]],
+    include_patterns: list[str],
     exclude_patterns: list[str]
 ) -> list[tuple[TrackRecord, Path]]:
     """Filter track pairs based on include/exclude glob patterns."""
     if not include_patterns and not exclude_patterns:
         return pairs
-    
+
     import fnmatch
     filtered = []
-    
+
     for track, dest in pairs:
         # Convert path to posix string for consistent glob matching across OSes
         path_str = track.relative_path.as_posix()
-        
+
         excluded = False
         for pattern in exclude_patterns:
             if fnmatch.fnmatch(path_str, pattern):
                 excluded = True
                 break
-        
+
         if excluded:
             continue
-            
+
         # If include patterns specified, must match at least one
         if include_patterns:
             included = False
@@ -101,7 +101,7 @@ def filter_tracks_by_patterns(
                     break
             if not included:
                 continue
-                
+
         filtered.append((track, dest))
 
     return filtered
@@ -128,10 +128,10 @@ def cmd_sync(args: argparse.Namespace, cfg: AppConfig) -> int:
     result = scan_library(source_root)
     name_template = getattr(args, 'name_template', None)
     pairs = mirror_plan(result, flac_root, name_template=name_template)
-    
+
     if getattr(args, 'include', None) or getattr(args, 'exclude', None):
         pairs = filter_tracks_by_patterns(pairs, args.include or [], args.exclude or [])
-    
+
     dry_run = bool(args.dry_run)
     interactive = bool(getattr(args, 'interactive', False))
 
@@ -142,7 +142,7 @@ def cmd_sync(args: argparse.Namespace, cfg: AppConfig) -> int:
 
     if hasattr(source, 'set_quality_preference'):
         source.set_quality_preference(args.quality)
-    
+
     enhance_metadata = bool(getattr(args, 'enhance_metadata', False))
 
     w, sk, errs = sync_tracks(

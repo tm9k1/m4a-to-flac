@@ -30,7 +30,7 @@ def _load_sync_state(flac_root: Path) -> Dict[str, Dict]:
     state_file = _get_state_file_path(flac_root)
     if not state_file.exists():
         return {}
-    
+
     try:
         with open(state_file, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -62,10 +62,10 @@ def _has_file_changed(state: Dict[str, Dict], relative_path: str, file_path: Pat
     """Check if a file has been modified since last sync."""
     if relative_path not in state:
         return False
-    
+
     old_hash = state[relative_path].get('hash')
     new_hash = _get_file_hash(file_path)
-    
+
     return old_hash != new_hash
 
 
@@ -112,9 +112,9 @@ def mirror_plan(result: ScanResult, flac_root: Path, name_template: str | None =
     ``Title`` / ``Title - Artist`` / ``Title - Artist - Album`` (see ``naming``).
     """
     from music_flac.naming import apply_name_template
-    
+
     flac_root = flac_root.resolve()
-    
+
     if name_template:
         # Use custom template for all tracks, preserving per-folder uniqueness.
         by_parent: dict[Path, list[TrackRecord]] = defaultdict(list)
@@ -274,17 +274,17 @@ def _process_one_pair(
     """
     relative_path_flac = str(dest.relative_to(flac_root))
     relative_path_original = str(_get_copied_dest_path(dest, track.source_path).relative_to(flac_root))
-    
+
     # Check if user modified files
     if _is_flac_exists(dest) and _has_file_changed(state, relative_path_flac, dest):
         log.info("User modified FLAC file, skipping: %s", posix_display(dest))
         return ("skipped", None, dest, 0)
-    
+
     original_path = _get_copied_dest_path(dest, track.source_path)
     if _is_original_exists(dest, track.source_path) and _has_file_changed(state, relative_path_original, original_path):
         log.info("User modified original file, skipping: %s", posix_display(original_path))
         return ("skipped", None, original_path, 0)
-    
+
     # CASE 1: Nothing exists in dest dir
     if not _is_flac_exists(dest) and not _is_original_exists(dest, track.source_path):
         # Try to fetch from backend
@@ -308,7 +308,7 @@ def _process_one_pair(
                     return ("error", f"{track.relative_path}: Backend fetch failed: {exc}; copy failed: {copy_exc}", dest, 0)
             else:
                 return ("error", f"{track.relative_path}: {exc}", dest, 0)
-    
+
     # CASE 2: FLAC exists
     elif _is_flac_exists(dest):
         if enhance_metadata and not _has_file_changed(state, relative_path_flac, dest):
@@ -320,7 +320,7 @@ def _process_one_pair(
                 except Exception as exc:
                     log.warning("Failed to embed enhanced metadata for %s: %s", dest, exc)
         return ("skipped", None, dest, 0)
-    
+
     # CASE 3: Original exists (but not FLAC)
     else:
         # Do nothing - respect the source track
@@ -347,16 +347,16 @@ def sync_tracks(
     # Load previous state
     state = _load_sync_state(flac_root)
     new_state: Dict[str, Dict] = {}
-    
+
     max_workers = max(1, int(max_workers))
     written = 0
     skipped = 0
     errors: list[str] = []
-    
+
     # Interactive mode requires sequential processing
     if interactive:
         max_workers = 1
-    
+
     # Process all pairs (no filtering - let _process_one_pair handle the logic)
     pending = pairs
 
@@ -470,5 +470,5 @@ def sync_tracks(
 
     # Save new state
     _save_sync_state(flac_root, new_state)
-    
+
     return written, skipped, errors
