@@ -72,6 +72,31 @@ def apply_flac_metadata(dest: Path, metadata: dict[str, Any]) -> None:
     flac.save()
 
 
+def needs_flac_metadata_update(dest: Path, metadata: dict[str, Any]) -> bool:
+    tags = metadata.get("tags") or {}
+    pictures = metadata.get("pictures") or []
+    if not tags and not pictures:
+        return False
+
+    flac = FLAC(dest)
+    existing_tags = flac.tags or {}
+
+    for key, desired in tags.items():
+        desired_values = _tag_values(desired)
+        existing_values = [str(v) for v in existing_tags.get(key, [])]
+        if existing_values != desired_values:
+            return True
+
+    if pictures:
+        existing_pictures = getattr(flac, "pictures", []) or []
+        desired_fps = [_picture_fingerprint(pic) for pic in pictures]
+        existing_fps = [_picture_fingerprint_mutagen(pic) for pic in existing_pictures]
+        if existing_fps != desired_fps:
+            return True
+
+    return False
+
+
 def _tag_values(value: Any) -> list[str]:
     if value is None:
         return []
@@ -97,27 +122,3 @@ def _picture_fingerprint_mutagen(pic: Picture) -> tuple[str, int, str, bytes | N
         bytes(pic.data) if pic.data is not None else None,
     )
 
-
-def needs_flac_metadata_update(dest: Path, metadata: dict[str, Any]) -> bool:
-    tags = metadata.get("tags") or {}
-    pictures = metadata.get("pictures") or []
-    if not tags and not pictures:
-        return False
-
-    flac = FLAC(dest)
-    existing_tags = flac.tags or {}
-
-    for key, desired in tags.items():
-        desired_values = _tag_values(desired)
-        existing_values = [str(v) for v in existing_tags.get(key, [])]
-        if existing_values != desired_values:
-            return True
-
-    if pictures:
-        existing_pictures = getattr(flac, "pictures", []) or []
-        desired_fps = [_picture_fingerprint(pic) for pic in pictures]
-        existing_fps = [_picture_fingerprint_mutagen(pic) for pic in existing_pictures]
-        if existing_fps != desired_fps:
-            return True
-
-    return False

@@ -34,6 +34,12 @@ class HifiFlacSource:
     client: HifiClient
     qualities: tuple[str, ...] = DEFAULT_QUALITIES
 
+    def set_quality_preference(self, quality: str) -> None:
+        """Set the preferred quality level for downloads."""
+        if quality not in DEFAULT_QUALITIES:
+            raise ValueError(f"Invalid quality: {quality}. Must be one of {DEFAULT_QUALITIES}")
+        self.qualities = (quality,) + tuple(q for q in DEFAULT_QUALITIES if q != quality)
+
     def fetch_flac(self, track: TrackRecord) -> bytes:
         data, _ = self.fetch_flac_with_metadata(track)
         return data
