@@ -5,7 +5,7 @@ import mimetypes
 from pathlib import Path
 from typing import Any
 
-from mutagen.flac import FLAC, Picture
+from mutagen.flac import FLAC, FLACNoHeaderError, Picture
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +41,11 @@ def apply_flac_metadata(dest: Path, metadata: dict[str, Any]) -> None:
     if not tags and not pictures:
         return
 
-    flac = FLAC(dest)
+    try:
+        flac = FLAC(dest)
+    except (FLACNoHeaderError, Exception) as exc:
+        log.warning("Cannot open FLAC file for metadata update at %s: %s", dest, exc)
+        return
 
     for key, value in tags.items():
         if value is None:
@@ -78,7 +82,12 @@ def needs_flac_metadata_update(dest: Path, metadata: dict[str, Any]) -> bool:
     if not tags and not pictures:
         return False
 
-    flac = FLAC(dest)
+    try:
+        flac = FLAC(dest)
+    except (FLACNoHeaderError, Exception) as exc:
+        log.warning("Cannot open FLAC file for metadata check at %s: %s", dest, exc)
+        return False
+
     existing_tags = flac.tags or {}
 
     for key, desired in tags.items():

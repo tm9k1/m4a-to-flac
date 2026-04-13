@@ -251,7 +251,8 @@ def _is_valid_flac_file(dest: Path) -> bool:
     try:
         FLAC(dest)
         return True
-    except Exception:
+    except Exception as exc:
+        log.debug("File is not a valid FLAC: %s (%s)", dest, exc)
         return False
 
 
