@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 from pathlib import Path
 
 from music_flac.models import TrackRecord
+
+log = logging.getLogger(__name__)
 
 # YouTube video IDs are 11 characters in this alphabet.
 _YT_ID_BODY = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -126,3 +129,21 @@ def resolve_stems_in_folder(tracks: list[TrackRecord]) -> dict[TrackRecord, str]
 def destination_relative_flac(track: TrackRecord, stem: str) -> Path:
     """Relative path under the FLAC root: same parent dirs as source, new leaf name."""
     return track.relative_path.parent / f"{stem}.flac"
+
+
+def apply_name_template(track: TrackRecord, template: str) -> str:
+    """Apply a custom naming template to a track record."""
+    template_vars = {
+        'artist': track.artist or 'Unknown Artist',
+        'album': track.album or 'Unknown Album',
+        'title': track.title or 'Unknown Title',
+        'tracknumber': track.tracknumber or 0,
+        'discnumber': track.discnumber or 1,
+    }
+
+    try:
+        result = template.format(**template_vars)
+        return sanitize_filename_segment(result)
+    except (KeyError, ValueError) as e:
+        log.warning("Invalid name template %r: %s. Using default naming.", template, e)
+        return sanitize_filename_segment(track.title or 'Unknown Title')
