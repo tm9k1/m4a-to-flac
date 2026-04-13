@@ -2,6 +2,7 @@ from pathlib import Path
 
 from music_flac.models import TrackRecord
 from music_flac.naming import (
+    apply_name_template,
     resolve_stems_in_folder,
     strip_youtube_id_suffix,
 )
@@ -68,3 +69,13 @@ def test_numeric_suffix_when_metadata_identical():
     b = _tr("f/b.mp3", title="Same", artist="Art", album="LP")
     r = resolve_stems_in_folder([a, b])
     assert set(r.values()) == {"Same - Art - LP", "Same - Art - LP (2)"}
+
+
+def test_apply_name_template_formats_track_fields():
+    track = _tr("f/a.mp3", title="Song", artist="One", album="Album")
+    assert apply_name_template(track, "{artist} - {title}") == "One - Song"
+
+
+def test_apply_name_template_invalid_template_falls_back():
+    track = _tr("f/a.mp3", title="Song")
+    assert apply_name_template(track, "{bad}") == "Song"
