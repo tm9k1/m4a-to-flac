@@ -7,9 +7,8 @@ import sys
 from pathlib import Path
 
 from music_flac import __version__
-from music_flac.api.http import HttpFlacSource
-from music_flac.api.stub import StubFlacSource
 from music_flac.config import AppConfig, DEFAULT_FLAC_ROOT, DEFAULT_SOURCE_ROOT
+from music_flac.models import TrackRecord
 from music_flac.paths import posix_display
 from music_flac.scanner import scan_library
 from music_flac.sync import mirror_plan, sync_tracks
@@ -47,7 +46,10 @@ def cmd_plan(args: argparse.Namespace, cfg: AppConfig) -> int:
         print(f"Not a directory: {source_root}", file=sys.stderr)
         return 2
     result = scan_library(source_root)
-    pairs = mirror_plan(result, flac_root)
+    pairs = mirror_plan(result, flac_root, name_template=getattr(args, 'name_template', None))
+    if getattr(args, 'include', None) or getattr(args, 'exclude', None):
+        pairs = filter_tracks_by_patterns(pairs, args.include or [], args.exclude or [])
+
     print(f"Source: {posix_display(source_root)}")
     print(f"FLAC root: {posix_display(flac_root)}")
     print(f"Tracks: {len(pairs)}\n")
@@ -65,8 +67,48 @@ def cmd_plan(args: argparse.Namespace, cfg: AppConfig) -> int:
     return 0
 
 
+def filter_tracks_by_patterns(
+    pairs: list[tuple[TrackRecord, Path]], 
+    include_patterns: list[str], 
+    exclude_patterns: list[str]
+) -> list[tuple[TrackRecord, Path]]:
+    """Filter track pairs based on include/exclude glob patterns."""
+    if not include_patterns and not exclude_patterns:
+        return pairs
+    
+    import fnmatch
+    filtered = []
+    
+    for track, dest in pairs:
+        # Convert path to posix string for consistent glob matching across OSes
+        path_str = track.relative_path.as_posix()
+        
+        excluded = False
+        for pattern in exclude_patterns:
+            if fnmatch.fnmatch(path_str, pattern):
+                excluded = True
+                break
+        
+        if excluded:
+            continue
+            
+        # If include patterns specified, must match at least one
+        if include_patterns:
+            included = False
+            for pattern in include_patterns:
+                if fnmatch.fnmatch(path_str, pattern):
+                    included = True
+                    break
+            if not included:
+                continue
+                
+        filtered.append((track, dest))
+
+    return filtered
+
+
 def cmd_sync(args: argparse.Namespace, cfg: AppConfig) -> int:
-    if args.show_errors_only:
+    if getattr(args, 'quiet', False):
         logging.getLogger().setLevel(logging.ERROR)
 
     source_root = Path(args.source).expanduser().resolve()
@@ -75,43 +117,44 @@ def cmd_sync(args: argparse.Namespace, cfg: AppConfig) -> int:
         print(f"Not a directory: {source_root}", file=sys.stderr)
         return 2
 
-    backend = args.backend
-    if backend == "http":
-        url = args.api_url or cfg.api_url
-        if not url:
-            print(
-                "HTTP backend requires --api-url or MUSIC_FLAC_API_URL.",
-                file=sys.stderr,
-            )
-            return 2
-        token = args.api_token if args.api_token is not None else cfg.api_token
-        source = HttpFlacSource(api_url=url, token=token, timeout_s=cfg.request_timeout_s)
-    elif backend == "hifi":
-        from music_flac.api.hifi_flac import HifiFlacSource
-        from music_flac.hifi import HifiClient
+    # Only hifi backend now
+    from music_flac.api.hifi_flac import HifiFlacSource
+    from music_flac.hifi import HifiClient
 
-        base = str(args.hifi_base_url or cfg.hifi_base_url)
-        client = HifiClient(base_url=base, timeout_s=cfg.request_timeout_s)
-        source = HifiFlacSource(client)
-    else:
-        source = StubFlacSource()
+    base = str(args.base_url or cfg.hifi_base_url)
+    client = HifiClient(base_url=base, timeout_s=cfg.request_timeout_s)
+    source = HifiFlacSource(client)
 
     result = scan_library(source_root)
-    pairs = mirror_plan(result, flac_root)
+    name_template = getattr(args, 'name_template', None)
+    pairs = mirror_plan(result, flac_root, name_template=name_template)
+    
+    if getattr(args, 'include', None) or getattr(args, 'exclude', None):
+        pairs = filter_tracks_by_patterns(pairs, args.include or [], args.exclude or [])
+    
     dry_run = bool(args.dry_run)
-    skip_existing = not bool(args.force)
+    interactive = bool(getattr(args, 'interactive', False))
 
     workers = (
         args.workers if args.workers is not None else cfg.sync_max_workers
     )
     workers = max(1, int(workers))
 
+    if hasattr(source, 'set_quality_preference'):
+        source.set_quality_preference(args.quality)
+    
+    enhance_metadata = bool(getattr(args, 'enhance_metadata', False))
+
     w, sk, errs = sync_tracks(
         pairs,
         source,
+        flac_root,
         dry_run=dry_run,
-        skip_existing=skip_existing,
+        copy_missing_tracks=bool(args.copy_missing_tracks),
         max_workers=workers,
+        interactive=interactive,
+        name_template=name_template,
+        enhance_metadata=enhance_metadata,
     )
     print(
         f"Done. written={w} skipped_existing={sk} errors={len(errs)} "
@@ -120,43 +163,6 @@ def cmd_sync(args: argparse.Namespace, cfg: AppConfig) -> int:
     for e in errs:
         print(e, file=sys.stderr)
     return 1 if errs else 0
-
-
-def cmd_hifi_probe(args: argparse.Namespace, cfg: AppConfig) -> int:
-    from music_flac.hifi import HifiClient
-
-    base = str(args.base_url if args.base_url is not None else cfg.hifi_base_url)
-    client = HifiClient(base_url=base, timeout_s=cfg.request_timeout_s)
-    info = client.service_info()
-    print(json.dumps(info, indent=2))
-    return 0
-
-
-def cmd_hifi_fetch_one(args: argparse.Namespace, cfg: AppConfig) -> int:
-    from music_flac.api.hifi_flac import fetch_one_track_to_path
-    from music_flac.hifi import HifiClient
-
-    if not any([args.query, args.title, args.artist, args.album]):
-        print(
-            "Provide at least one of --query --title --artist --album.",
-            file=sys.stderr,
-        )
-        return 2
-    search_q = args.query or " ".join(
-        p for p in (args.artist, args.title, args.album) if p
-    )
-    base = str(args.base_url if args.base_url is not None else cfg.hifi_base_url)
-    client = HifiClient(base_url=base, timeout_s=cfg.request_timeout_s)
-    n = fetch_one_track_to_path(
-        client,
-        search_query=search_q,
-        output=args.output,
-        title=args.title,
-        artist=args.artist,
-        album=args.album,
-    )
-    print(f"Wrote {n} bytes to {posix_display(Path(args.output).resolve())}")
-    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -194,44 +200,40 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_FLAC_ROOT,
         help=f"Root for downloaded FLACs (default: {DEFAULT_FLAC_ROOT})",
     )
+    pp.add_argument(
+        "--include",
+        action="append",
+        metavar="PATTERN",
+        help="Include only tracks matching glob pattern (can be used multiple times).",
+    )
+    pp.add_argument(
+        "--exclude",
+        action="append",
+        metavar="PATTERN",
+        help="Exclude tracks matching glob pattern (can be used multiple times).",
+    )
+    pp.add_argument(
+        "--name-template",
+        metavar="TEMPLATE",
+        help="Custom filename template using {artist}, {album}, {title}, {tracknumber}, etc.",
+    )
     pp.set_defaults(func=cmd_plan)
 
     py = sub.add_parser(
         "sync",
-        help="Download FLAC for each track (stub or HTTP API) into the mirror tree.",
+        help="Download FLAC for each track from hifi-api into the mirror tree.",
     )
     py.add_argument("--source", type=Path, default=DEFAULT_SOURCE_ROOT)
     py.add_argument("--dest", type=Path, default=DEFAULT_FLAC_ROOT)
     py.add_argument(
-        "--backend",
-        choices=("stub", "http", "hifi"),
-        default="stub",
-        help="stub: placeholder; http: POST JSON; hifi: search+track manifest (hifi-api).",
-    )
-    py.add_argument(
-        "--api-url",
+        "--base-url",
         default=None,
-        help="Override MUSIC_FLAC_API_URL for this run.",
-    )
-    py.add_argument(
-        "--api-token",
-        default=None,
-        help="Override MUSIC_FLAC_API_TOKEN for this run.",
+        help="Hifi API base URL (default: MUSIC_FLAC_HIFI_BASE or https://hifi.geeked.wtf/).",
     )
     py.add_argument(
         "--dry-run",
         action="store_true",
         help="Do not write files; only log what would happen.",
-    )
-    py.add_argument(
-        "--force",
-        action="store_true",
-        help="Re-fetch even if the destination file already exists.",
-    )
-    py.add_argument(
-        "--hifi-base-url",
-        default=None,
-        help="Override MUSIC_FLAC_HIFI_BASE for sync --backend hifi.",
     )
     py.add_argument(
         "--workers",
@@ -241,51 +243,44 @@ def build_parser() -> argparse.ArgumentParser:
         help="Parallel downloads (max concurrent tracks). Default: MUSIC_FLAC_SYNC_WORKERS or 8. Use 1 for sequential.",
     )
     py.add_argument(
-        "--show-errors-only",
+        "--copy-missing-tracks",
         action="store_true",
-        help="Only log errors, not successful downloads.",
+        help="Copy missing tracks from source directory preserving original extension if hifi fetch fails.",
+    )
+    py.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Review and approve each change interactively before applying.",
+    )
+    py.add_argument(
+        "--include",
+        action="append",
+        metavar="PATTERN",
+        help="Include only tracks matching glob pattern (can be used multiple times).",
+    )
+    py.add_argument(
+        "--exclude",
+        action="append",
+        metavar="PATTERN",
+        help="Exclude tracks matching glob pattern (can be used multiple times).",
+    )
+    py.add_argument(
+        "--quality",
+        choices=["LOSSLESS", "HI_RES_LOSSLESS", "HIGH"],
+        default="LOSSLESS",
+        help="Preferred quality level for FLAC downloads (default: LOSSLESS).",
+    )
+    py.add_argument(
+        "--name-template",
+        metavar="TEMPLATE",
+        help="Custom filename template using {artist}, {album}, {title}, {tracknumber}, etc.",
+    )
+    py.add_argument(
+        "--enhance-metadata",
+        action="store_true",
+        help="Fetch and apply additional metadata (genres, cover art) from hifi API.",
     )
     py.set_defaults(func=cmd_sync)
-
-    ph = sub.add_parser(
-        "hifi-probe",
-        help="Fetch GET / JSON from a hifi-api-compatible base URL (default: hifi.geeked.wtf).",
-    )
-    ph.add_argument(
-        "--base-url",
-        type=str,
-        default=None,
-        help="Server root (default: MUSIC_FLAC_HIFI_BASE or https://hifi.geeked.wtf/).",
-    )
-    ph.set_defaults(func=cmd_hifi_probe)
-
-    pf = sub.add_parser(
-        "hifi-fetch-one",
-        help="Search hifi-api, download one track to a file (smoke test / manual grab).",
-    )
-    pf.add_argument(
-        "--base-url",
-        type=str,
-        default=None,
-        help="Server root (default: MUSIC_FLAC_HIFI_BASE or hifi.geeked.wtf).",
-    )
-    pf.add_argument(
-        "--query",
-        type=str,
-        default=None,
-        help="Search string passed as GET /search?s=… (track query).",
-    )
-    pf.add_argument("--title", type=str, default=None, help="Hint for picking the best hit.")
-    pf.add_argument("--artist", type=str, default=None, help="Hint for picking the best hit.")
-    pf.add_argument("--album", type=str, default=None, help="Hint for picking the best hit.")
-    pf.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        required=True,
-        help="Output file path (.flac or container extension from CDN).",
-    )
-    pf.set_defaults(func=cmd_hifi_fetch_one)
 
     return p
 
