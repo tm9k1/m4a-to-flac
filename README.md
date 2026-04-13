@@ -1,28 +1,95 @@
 # music-flac
 
-Scan an existing music library on disk, show embedded metadata, and **mirror the same parent folder layout** under a second root where each file is a **`.flac`** fetched from your **external API**.
+**Safe, user-respecting FLAC conversion for your music library.** Scan your existing music collection and automatically download high-quality FLAC versions while preserving your folder structure and respecting your manual changes.
 
-Output paths in the CLI use **forward slashes** everywhere (`pathlib.Path.as_posix()`), so logs and plans look the same on Windows, macOS, and Linux.
+## What It Does
+
+`music-flac` helps you upgrade your music library to lossless FLAC format. It scans your existing music files, searches for high-quality FLAC versions online, and creates a mirror of your library with the same folder structure. The key difference from other tools: **it respects your choices and never overwrites your work**.
+
+### User-Centric Design
+
+We designed this tool to feel safe and predictable, emulating how you'd manually organize your music:
+
+- **🔒 Respects your existing work** - Never overwrites files you've already processed
+- **🛡️ Detects manual changes** - Remembers what you've modified and skips re-processing
+- **📁 Preserves your organization** - Maintains your exact folder structure
+- **🔄 Smart fallbacks** - If online sources fail, copies your original tracks
+- **👀 Transparent preview** - See exactly what will happen before making changes
+
+### Typical User Scenarios
+
+**Scenario 1: First-time setup**
+```
+Your library: Artist/Album/song.mp3
+After sync:  Artist/Album/song.flac  (downloaded)
+```
+
+**Scenario 2: You've already converted some tracks**
+```
+Your library: Artist/Album/song.mp3
+FLAC folder: Artist/Album/song.flac  (exists)
+Result:      Skipped - respects your existing work
+```
+
+**Scenario 3: Online source unavailable**
+```
+Your library: Artist/Album/song.mp3
+FLAC folder: (empty)
+Result:      Artist/Album/song.mp3  (copied as fallback)
+```
+
+**Scenario 4: You manually edited metadata**
+```
+Your library: Artist/Album/song.mp3
+FLAC folder: Artist/Album/song.flac  (you edited tags)
+Result:      Skipped - detects your changes and preserves them
+```
+
+## Quick Start
+
+1. **Install**: `pip install -e .`
+2. **Preview**: `music-flac plan` (see what would happen)
+3. **Test run**: `music-flac sync --dry-run` (safe preview)
+4. **Convert**: `music-flac sync` (downloads FLACs)
 
 Default paths (Windows):
+- Source: `D:\Libraries\Music\Good Music`
+- Destination: `D:\Libraries\Music\Good Music FLACs`
 
-| Role | Path |
-|------|------|
-| Source library | `D:\Libraries\Music\Good Music` |
-| FLAC mirror | `D:\Libraries\Music\Good Music FLACs` |
+## CLI Overview
 
-Override with `--source` / `--dest` or environment variables `MUSIC_FLAC_SOURCE` and `MUSIC_FLAC_DEST`.
+```bash
+music-flac scan        [--source PATH]          # list tracks + tags
+music-flac plan        [--source PATH] [--dest PATH] [--include PATTERN] [--exclude PATTERN] [--name-template TEMPLATE]   # preview source → FLAC mapping
+music-flac sync        [--source PATH] [--dest PATH] [--base-url URL] [--dry-run] [--copy-missing-tracks] [--interactive] [--include PATTERN] [--exclude PATTERN] [--quality QUALITY] [--name-template TEMPLATE] [--enhance-metadata]
+```
+
+- **`scan`** — Shows what tracks and metadata were found in your library.
+- **`plan`** — Previews the exact file mappings with optional filters and custom naming.
+- **`sync`** — Downloads FLACs, respecting existing work and user changes, with interactive approval, selective filtering, quality control, and enhanced metadata.
+## Safety Features
+
+- **State tracking** - Remembers your modifications in `.music-flac-state.json`
+- **Atomic writes** - Temporary files prevent corruption if downloads fail
+- **Parallel downloads** - Fast processing with `--workers` option
+- **Dry-run mode** - Test everything safely first
+- **Fallback copying** - Never leaves you without music
+
+## Requirements
+
+- Python 3.10+
+- Internet connection for FLAC downloads
+- Install: `pip install -e ".[dev]"` from this repo (or `pip install -e .` for runtime only).
 
 ## Documentation
 
-Detailed help lives in the **[docs/](docs/README.md)** folder:
+Detailed help in **[docs/](docs/README.md)**:
+- [Configuration](docs/configuration.md) - Environment variables and settings
+- [CLI Reference](docs/cli-reference.md) - All commands and options
+- [File Naming](docs/library-mirror-naming.md) - How filenames are generated
+- [Sync Behavior](docs/sync-and-backends.md) - Technical details
 
-- [Configuration and environment variables](docs/configuration.md)
-- [CLI reference (all commands and flags)](docs/cli-reference.md)
-- [Library scanning, mirror layout, and file naming](docs/library-mirror-naming.md)
-- [Sync behavior, stub/HTTP/**hifi** backends](docs/sync-and-backends.md)
-
-## Mirror file naming
+## Mirror File Naming
 
 Under each source folder, destination **leaf** names are built from tags (title, artist, album), with this disambiguation **within that folder**:
 
@@ -32,60 +99,3 @@ Under each source folder, destination **leaf** names are built from tags (title,
 4. If still colliding (identical metadata): **numeric suffix** ` (2)`, ` (3)`, …
 
 When stripping a trailing **YouTube-style 11-character id** from the source filename (e.g. `… - dQw4w9WgXcQ` or `… [dQw4w9WgXcQ]`), that cleaned stem is only used as a **fallback title** when tags omit a title.
-
-## Requirements
-
-- Python 3.10+
-- Install: `pip install -e ".[dev]"` from this repo (or `pip install -e .` for runtime only).
-
-## CLI
-
-```bash
-music-flac scan        [--source PATH]          # list tracks + tags
-music-flac plan        [--source PATH] [--dest PATH]   # source → mirror .flac paths
-music-flac sync           [--source PATH] [--dest PATH] [--backend stub|http|hifi] [--workers N] [--dry-run]
-music-flac hifi-probe     [--base-url URL]         # GET / JSON (default from MUSIC_FLAC_HIFI_BASE)
-music-flac hifi-fetch-one -o out.flac [--query …] [--artist …] [--title …]   # one-track smoke test
-```
-
-- **`plan`** — No network; shows mapping with **forward slashes**. Same parent directories as the source; leaf names follow **Mirror file naming** above.
-- **`sync`** — **`stub`**: placeholder files. **`http`**: POST JSON to your API; body saved as `.flac`. **`hifi`**: [hifi-api](https://github.com/binimum/hifi-api)-compatible **search → `/track` manifest → CDN** download (default base [hifi.geeked.wtf](https://hifi.geeked.wtf/); override with `MUSIC_FLAC_HIFI_BASE` or `--hifi-base-url`).
-
-### hifi-api-compatible services (e.g. [hifi.geeked.wtf](https://hifi.geeked.wtf/))
-
-These servers expose a **Tidal-oriented** JSON API ([binimum/hifi-api](https://github.com/binimum/hifi-api) / [hifi-api-workers](https://github.com/monochrome-music/hifi-api-workers)). Use **`music-flac hifi-probe`** to verify **`GET /`**. Use **`music-flac hifi-fetch-one`** or **`sync --backend hifi`** for search + stream download. Details: [docs/sync-and-backends.md](docs/sync-and-backends.md).
-
-### HTTP API contract (adjust `music_flac.api.http` if yours differs)
-
-- Set `MUSIC_FLAC_API_URL` to your endpoint.
-- Optional: `MUSIC_FLAC_API_TOKEN` (sent as `Authorization: Bearer …`).
-- Request: `POST` with `Content-Type: application/json` and body:
-
-```json
-{
-  "artist": "...",
-  "album": "...",
-  "title": "...",
-  "tracknumber": "...",
-  "discnumber": "...",
-  "relative_path": "Artist/Album/01 - Song.mp3"
-}
-```
-
-- Response: raw FLAC bytes in the body.
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-pytest
-music-flac --help
-```
-
-See `CHANGELOG.md` for version history, `AGENTS.md` for contributor/agent notes, and **`docs/`** for full feature documentation.
-
-## License
-
-**music-flac** is licensed under the [**GNU Affero General Public License v3.0 or later**](https://www.gnu.org/licenses/agpl-3.0.html) (SPDX: `AGPL-3.0-or-later`). See the [`LICENSE`](LICENSE) file for the full license text and project copyright notice.
-
-If you run a **modified** version of this program as a **network service**, the AGPL requires you to offer corresponding source to users of that service. Third-party APIs (for example hifi/Tidal endpoints) remain under their own terms.
